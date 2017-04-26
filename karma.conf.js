@@ -15,6 +15,7 @@ module.exports = (config) => {
       'src/data_formatter.js',
       'src/geohash.js',
       'src/libs/leaflet.js',
+      'src/libs/leaflet-heat.js',
       'test/*.js'
     ],
 
@@ -50,6 +51,8 @@ module.exports = (config) => {
         'src/worldmap.js',
         'src/data_formatter.js',
         'src/libs/leaflet.js',
+        'src/libs/leaflet.js',
+        'src/libs/leaflet-heat.js',
         'test/**/*.js'
       ],
 
