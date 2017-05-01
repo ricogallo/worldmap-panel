@@ -1,6 +1,6 @@
 'use strict';
 
-System.register(['lodash', './libs/leaflet'], function (_export, _context) {
+System.register(['lodash', './libs/leaflet', './libs/leaflet-heat'], function (_export, _context) {
   "use strict";
 
   var _, L, _createClass, tileServers, WorldMap;
@@ -16,7 +16,7 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
       _ = _lodash.default;
     }, function (_libsLeaflet) {
       L = _libsLeaflet.default;
-    }],
+    }, function (_libsLeafletHeat) {}],
     execute: function () {
       _createClass = function () {
         function defineProperties(target, props) {
@@ -48,7 +48,8 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
           this.ctrl = ctrl;
           this.mapContainer = mapContainer;
           this.createMap();
-          this.circles = [];
+          this.circles = {};
+          this.heatData = [];
         }
 
         _createClass(WorldMap, [{
@@ -91,13 +92,29 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
             this.legend.addTo(this.map);
           }
         }, {
+          key: 'drawOverlay',
+          value: function drawOverlay() {
+            switch (this.ctrl.data.mapType) {
+              case "circle":
+                this.clearHeat();
+                this.drawCircles();
+                break;
+              case "heat":
+                this.clearCircles();
+                this.drawHeat();
+                break;
+              default:
+                break;
+            }
+          }
+        }, {
           key: 'needToRedrawCircles',
           value: function needToRedrawCircles(data) {
-            if (this.circles.length === 0 && data.length > 0) return true;
-
-            if (this.circles.length !== data.length) return true;
-            var locations = _.map(_.map(this.circles, 'options'), 'location').sort();
-            var dataPoints = _.map(data, 'key').sort();
+            var nCirc = _.size(this.circles);
+            if (nCirc === 0 && data.length > 0) return true;
+            if (nCirc !== data.length) return true;
+            var locations = new Set(_.map(_.map(this.circles, 'options'), 'location'));
+            var dataPoints = new Set(_.map(data, 'key'));
             return !_.isEqual(locations, dataPoints);
           }
         }, {
@@ -115,8 +132,16 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
             if (this.circlesLayer) {
               this.circlesLayer.clearLayers();
               this.removeCircles(this.circlesLayer);
-              this.circles = [];
+              this.circles = {};
             }
+          }
+        }, {
+          key: 'clearHeat',
+          value: function clearHeat() {
+            if (this.heatLayer) {
+              this.map.removeLayer(this.heatLayer);
+            }
+            this.heatData = [];
           }
         }, {
           key: 'drawCircles',
@@ -134,12 +159,12 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
           value: function createCircles(data) {
             var _this3 = this;
 
-            var circles = [];
+            var circles = {};
             data.forEach(function (dataPoint) {
               if (!dataPoint.locationName) return;
-              circles.push(_this3.createCircle(dataPoint));
+              circles[dataPoint.key] = _this3.createCircle(dataPoint);
             });
-            this.circlesLayer = this.addCircles(circles);
+            this.circlesLayer = this.addCircles(_.values(circles));
             this.circles = circles;
           }
         }, {
@@ -150,9 +175,7 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
             data.forEach(function (dataPoint) {
               if (!dataPoint.locationName) return;
 
-              var circle = _.find(_this4.circles, function (cir) {
-                return cir.options.location === dataPoint.key;
-              });
+              var circle = _this4.circles[dataPoint.key];
 
               if (circle) {
                 circle.setRadius(_this4.calcCircleSize(dataPoint.value || 0));
@@ -226,6 +249,46 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
             return _.first(this.ctrl.panel.colors);
           }
         }, {
+          key: 'rgb2hex',
+          value: function rgb2hex(rgb) {
+            rgb = rgb.match(/^rgba?[\s+]?\([\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?,[\s+]?(\d+)[\s+]?/i);
+            return rgb && rgb.length === 4 ? "#" + ("0" + parseInt(rgb[1], 10).toString(16)).slice(-2) + ("0" + parseInt(rgb[2], 10).toString(16)).slice(-2) + ("0" + parseInt(rgb[3], 10).toString(16)).slice(-2) : '';
+          }
+        }, {
+          key: 'drawHeat',
+          value: function drawHeat() {
+            this.clearHeat();
+            // build up the array to feed the heat layer
+            var heatData = [];
+            var minValue = _.min(_.map(this.ctrl.data, 'value'));
+            var maxValue = _.max(_.map(this.ctrl.data, 'value'));
+
+            this.ctrl.data.forEach(function (dataPoint) {
+              if (!dataPoint.locationName) return;
+              var normalizedValue = (dataPoint.value - minValue) / (maxValue - minValue);
+              // let heatPoint = [dataPoint.locationLatitude, dataPoint.locationLongitude, normalizedValue];
+              var heatPoint = [dataPoint.locationLatitude, dataPoint.locationLongitude, dataPoint.value];
+              heatData.push(heatPoint);
+            });
+
+            var maxGrad = _.max(this.ctrl.data.thresholds);
+            var minGrad = 0; //_.min(this.ctrl.data.thresholds);
+            var mapMaxVal = maxGrad; //_.max([maxGrad,maxValue]);
+            // gradient - color gradient config, e.g. {0.4: 'blue', 0.65: 'lime', 1: 'red'}
+            var gradientData = {};
+            gradientData[0] = this.rgb2hex(this.ctrl.panel.colors[0]);
+            for (var index = 0; index < this.ctrl.data.thresholds.length; index++) {
+              var thresh = (this.ctrl.data.thresholds[index] - minGrad) / (maxGrad - minGrad);
+              if (thresh > 1) thresh = 1;else if (thresh < 0) thresh = 0;
+              gradientData[thresh] = this.rgb2hex(this.ctrl.panel.colors[index + 1]);
+            }
+            var radius = parseInt(this.ctrl.panel.heatSize),
+                blur = parseInt(this.ctrl.panel.heatBlur);
+            var heatOpts = { radius: radius, blur: blur, max: mapMaxVal, gradient: gradientData };
+            this.heatLayer = window.L.heatLayer(heatData, heatOpts).addTo(this.map);
+            this.heatData = heatData;
+          }
+        }, {
           key: 'resize',
           value: function resize() {
             this.map.invalidateSize();
@@ -260,7 +323,7 @@ System.register(['lodash', './libs/leaflet'], function (_export, _context) {
         }, {
           key: 'remove',
           value: function remove() {
-            this.circles = [];
+            this.circles = {};
             if (this.circlesLayer) this.removeCircles();
             if (this.legend) this.removeLegend();
             this.map.remove();

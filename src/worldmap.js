@@ -204,7 +204,7 @@ export default class WorldMap {
       ("0" + parseInt(rgb[3],10).toString(16)).slice(-2) : '';
     }
 
-  drawHeat() {
+  drawHeat(data) {
     this.clearHeat();
     // build up the array to feed the heat layer
     const heatData = [];

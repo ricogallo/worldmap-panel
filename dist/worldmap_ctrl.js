@@ -37,7 +37,6 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
 
   return {
     setters: [function (_appPluginsSdk) {
-      /* eslint import/no-extraneous-dependencies: 0 */
       MetricsPanelCtrl = _appPluginsSdk.MetricsPanelCtrl;
     }, function (_appCoreTime_series) {
       TimeSeries = _appCoreTime_series.default;
@@ -76,8 +75,11 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
         mapCenterLongitude: 0,
         initialZoom: 1,
         valueName: 'total',
+        mapType: 'circle', // or 'heat'
         circleMinSize: 2,
         circleMaxSize: 30,
+        heatSize: 25,
+        heatBlur: 15,
         locationData: 'countries',
         thresholds: '0,10',
         colors: ['rgba(245, 54, 54, 0.9)', 'rgba(237, 129, 40, 0.89)', 'rgba(50, 172, 45, 0.97)'],
@@ -171,8 +173,8 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
             } else if (this.panel.locationData === 'table') {
               // .. Do nothing
             } else if (this.panel.locationData !== 'geohash') {
-                window.$.getJSON('public/plugins/grafana-worldmap-panel/data/' + this.panel.locationData + '.json').then(this.reloadLocations.bind(this));
-              }
+              window.$.getJSON('public/plugins/grafana-worldmap-panel/data/' + this.panel.locationData + '.json').then(this.reloadLocations.bind(this));
+            }
           }
         }, {
           key: 'reloadLocations',
@@ -213,6 +215,7 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
             this.data = data;
 
             this.updateThresholdData();
+            this.data.mapType = this.panel.mapType;
 
             this.render();
           }
@@ -240,6 +243,12 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
               this.panel.mapCenterLongitude = mapCenters[this.panel.mapCenter].mapCenterLongitude;
             }
             this.mapCenterMoved = true;
+            this.render();
+          }
+        }, {
+          key: 'setNewMapType',
+          value: function setNewMapType() {
+            this.data.mapType = this.panel.mapType;
             this.render();
           }
         }, {
@@ -280,6 +289,7 @@ System.register(['app/plugins/sdk', 'app/core/time_series2', 'app/core/utils/kbn
             }
             while (_.size(this.panel.colors) < _.size(this.data.thresholds) + 1) {
               // not enough colors. add one.
+
               var newColor = 'rgba(50, 172, 45, 0.97)';
               this.panel.colors.push(newColor);
             }
